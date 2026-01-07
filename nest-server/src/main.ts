@@ -4,13 +4,17 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
-    transport: Transport.TCP,
+    transport: Transport.KAFKA,
     options: {
-      host: '127.0.0.1',
-      port: 8888,
+      client: {
+        brokers: ['10.10.1.121:9092'],
+      },
+      consumer: {
+        groupId: 'math-service-consumer', // 실제 로직을 처리할 컨슈머 그룹
+      },
     },
   });
   await app.listen();
-  console.log('Math Service가 8888번 포트에서 TCP 수신 대기 중입니다.');
+  console.log('Math Kafka Service가 시작되었습니다.');
 }
 bootstrap();
