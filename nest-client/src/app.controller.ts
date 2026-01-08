@@ -1,10 +1,10 @@
-import { Controller, Get, Inject, Query, OnModuleInit, ParseArrayPipe, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Inject, Query, OnModuleInit, OnModuleDestroy, ParseArrayPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
 import { timeout, catchError } from 'rxjs/operators';
 import { of, firstValueFrom } from 'rxjs';
 
 @Controller('math')
-export class AppController implements OnModuleInit {
+export class AppController implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject('MATH_KAFKA_SERVICE') private readonly client: ClientKafka,
   ) { }
@@ -13,6 +13,16 @@ export class AppController implements OnModuleInit {
   async onModuleInit() {
     this.client.subscribeToResponseOf('math.sum'); // 응답받을 토픽 등록
     await this.client.connect();
+  }
+
+  // [종료 시] 서버 종료 신호가 들어오면 실행
+  async onModuleDestroy() {
+    console.log('서버 종료 신호 수신: 카프카 연결을 정리합니다...');
+
+    // 4. 연결을 안전하게 닫음 (Graceful Shutdown)
+    await this.client.close();
+
+    console.log('카프카 연결 종료 완료.');
   }
 
   @Get('add')

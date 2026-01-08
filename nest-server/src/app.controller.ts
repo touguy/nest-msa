@@ -1,8 +1,16 @@
-import { Controller } from '@nestjs/common';
+import { Controller, OnModuleDestroy } from '@nestjs/common';
 import { MessagePattern, EventPattern, Payload, Ctx, KafkaContext } from '@nestjs/microservices';
 
 @Controller()
-export class AppController {
+export class AppController implements OnModuleDestroy {
+
+  // 2. 서버 종료 시 호출되는 메서드
+  async onModuleDestroy() {
+    console.log('[AppController] 서버 종료 신호를 감지했습니다. 진행 중인 요청을 마무리합니다.');
+    // 마이크로서비스 서버(Consumer)는 main.ts의 enableShutdownHooks()에 의해 
+    // 새로운 메시지 수신을 중단하고 기존 처리가 완료될 때까지 대기하게 됩니다.
+  }
+
   @MessagePattern('math.sum') // 토픽명 'math.sum' 구독
   accumulate(@Payload() data: number[], @Ctx() context: KafkaContext): number {
     const originalMessage = context.getMessage(); // 카프카의 원본 메시지 전체 접근

@@ -14,6 +14,10 @@ async function bootstrap() {
       },
     },
   });
+
+  // 핵심: Shutdown Hooks 활성화: 이 설정을 해야 서버 종료 시 onModuleDestroy, beforeApplicationShutdown 등이 실행됩니다.
+  app.enableShutdownHooks();
+
   await app.listen();
   console.log('Math Kafka Service가 시작되었습니다.');
 }
