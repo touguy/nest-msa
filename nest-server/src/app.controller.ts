@@ -23,14 +23,44 @@ export class AppController implements OnModuleDestroy {
   }
 
   @EventPattern('math.sum.event') // 이벤트 패턴 사용
-  async handleSumEvent(@Payload() data: number[]) {
+  async handleSumEvent(@Payload() data: number[], @Ctx() context: KafkaContext) {
     console.log('[이벤트 수신] 계산 시작:', data);
 
-    // 복잡한 비즈니스 로직 시뮬레이션 (예: 2초 소요)
+    const { offset } = context.getMessage(); // 오프셋  
+    const partition = context.getPartition(); // 파티션
+    const topic = context.getTopic();   // 토픽
+
+    try {
+      console.log(`[이벤트 수신] 오프셋 ${offset} 계산 시작:`, data);
+
+      // 1. 비즈니스 로직 수행 (예: DB 저장 등)
+      // 만약 여기서 에러가 나면 catch 블록으로 이동합니다.
+      await this.doBusinessLogic(data);
+
+      const result = data.reduce((a, b) => a + b, 0);
+      console.log(`[이벤트 처리 완료] 결과: ${result} (이 결과는 DB에 저장되었다고 가정합니다)`);
+
+      // 사실: NestJS Kafka의 기본 설정이 autoCommit: true라면 
+      // 함수가 에러 없이 끝날 때 자동으로 오프셋이 커밋됩니다.
+
+    } catch (error) {
+      // 2. 롤백 및 에러 핸들링
+      console.error(`[오류 발생] 오프셋 ${offset} 처리에 실패했습니다.`);
+
+      // 핵심: 에러를 다시 던집니다(re-throw). 
+      // 이렇게 하면 NestJS/KafkaJS는 메시지 처리에 실패한 것으로 간주하고 
+      // 설정에 따라 재시도(Retry)를 하거나 커밋을 하지 않습니다.
+      throw error;
+    }
+  }
+
+  async doBusinessLogic(data: number[]) {
+    // 2초 소요 시뮬레이션
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const result = (data || []).reduce((a, b) => a + b, 0);
-
-    console.log(`[이벤트 처리 완료] 결과: ${result} (이 결과는 DB에 저장되었다고 가정합니다)`);
+    // 예시: 데이터가 없으면 강제로 에러 발생 (롤백 테스트용)
+    if (data.length === 0) {
+      throw new Error('데이터가 비어 있어 처리가 불가능합니다.');
+    }
   }
 }
