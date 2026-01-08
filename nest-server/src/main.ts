@@ -14,7 +14,7 @@ async function bootstrap() {
         allowAutoTopicCreation: true,  // 토픽 자동 생성. 운영은 false
       },
       run: {
-        autoCommit: false, // true일 경우 함수가 성공적으로 끝나야 커밋됨
+        autoCommit: true, // true일 경우 함수가 성공적으로 끝나야 커밋됨
       },
       subscribe: { fromBeginning: false }
     },

@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 @Controller()
 export class AppController implements OnModuleDestroy {
 
-  private readonly RETRY_DELAY = 5000; // 재시도 전 대기 시간 (5초)
+  private readonly RETRY_DELAY_MS = 5000; // 재시도 전 대기 시간 (5초)
   private readonly MAX_RETRY_COUNT = 3;
   private readonly retryMap = new Map<string, number>(); // 메시지별 재시도 횟수 관리
 
@@ -53,10 +53,6 @@ export class AppController implements OnModuleDestroy {
       const result = data.reduce((a, b) => a + b, 0);
       console.log('[이벤트 처리 완료] 결과: ${result} (이 결과는 DB에 저장되었다고 가정합니다)');
 
-      // 2. 성공 시 수동 커밋 (성공했을 때만 오프셋을 넘김)
-      await consumer.commitOffsets([
-        { topic, partition, offset: (BigInt(offset) + 1n).toString() }
-      ]);
       this.retryMap.delete(messageKey);
       console.log('[성공] 오프셋 ${offset} 커밋 완료');
 
@@ -68,21 +64,23 @@ export class AppController implements OnModuleDestroy {
       console.error('[에러] 오프셋 ${offset} 실패 (${currentRetry}회): ${error.message}');
 
       if (currentRetry <= this.MAX_RETRY_COUNT) {
-        // 3. 핵심: 파티션 일시 정지 (Pause)
-        // 이 파티션의 다음 메시지를 읽지 않도록 멈춥니다.
-        consumer.pause([{ topic, partitions: [partition] }]);
+
+        // 2. 재시도 로직: 카운트 증가 후 에러를 던져 커밋 방지
         this.retryMap.set(messageKey, currentRetry);
 
         console.log('[일시정지] ${partition}번 파티션 ${this.RETRY_DELAY}ms 동안 중지');
 
-        // 4. 일정 시간 후 Resume 및 재시도
-        setTimeout(async () => {
-          console.log('[재개] ${partition}번 파티션 다시 시작...');
-          consumer.resume([{ topic, partitions: [partition] }]);
+        // 해당 파티션을 멈춰서 다음 메시지를 읽지 못하게 함 (순서 보장 효과)
+        consumer.pause([{ topic, partitions: [partition] }]);
 
-          // 주의: Resume 후 자동으로 해당 오프셋부터 다시 읽게 됩니다.
-          // 별도로 호출할 필요 없이 카프카가 커밋되지 않은 오프셋부터 다시 가져옵니다.
-        }, this.RETRY_DELAY);
+        setTimeout(() => {
+          console.log(`[재개] ${partition}번 파티션 재시작 및 재시도 진행`);
+          // 5초 뒤 파티션 재개 -> 카프카가 커밋 안 된 이 메시지를 다시 가져옴
+          consumer.resume([{ topic, partitions: [partition] }]);
+        }, this.RETRY_DELAY_MS);
+
+        // 5초 후 재시도하도록 약간의 지연을 주고 싶다면 여기서 조절 가능 (의견 참고)
+        throw error; // 에러를 던지면 NestJS가 커밋하지 않고 메시지를 다시 가져옵니다.
 
       } else {
         // 5. 최종 실패 시 DLQ 전송 및 강제 커밋 (순서를 위해 포기하고 다음으로 넘어감)
@@ -100,15 +98,9 @@ export class AppController implements OnModuleDestroy {
           })
         );
 
-        // 4. 에러 메시지를 DLQ에 쌓았으므로, 현재 오프셋은 '처리된 것'으로 간주하고 커밋
-        // 이렇게 해야 '독약 메시지(Poison Pill)' 때문에 컨슈머가 멈추는 것을 방지합니다.
-        await consumer.commitOffsets([
-          { topic, partition, offset: (BigInt(offset) + 1n).toString() }
-        ]);
-
         this.retryMap.delete(messageKey);
-
         console.log('[DLQ] 실패 메시지 ${dlqTopic}로 이동 및 커밋 완료');
+        return;
       }
     }
   }
