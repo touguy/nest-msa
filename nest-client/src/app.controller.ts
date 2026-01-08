@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Query, OnModuleInit, ParseArrayPipe } from '@nestjs/common';
+import { Controller, Get, Inject, Query, OnModuleInit, ParseArrayPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
 import { timeout, catchError } from 'rxjs/operators';
 import { of, firstValueFrom } from 'rxjs';
@@ -29,14 +29,21 @@ export class AppController implements OnModuleInit {
 
   @Get('emit-add')
   async emitSum(@Query('data', new ParseArrayPipe({ items: Number, separator: ',' })) data: number[]) {
-    // 1. emit()은 이벤트를 발행하고 즉시 반환합니다.
-    // 2. 응답을 기다리지 않으므로 timeout 설정이 필요 없습니다.
-    this.client.emit('math.sum.event', { value: data });
+    try {
+      // 1. 카프카에 발행 시도
+      // emit()도 내부적으로 acks 설정에 따라 브로커의 확인을 기다립니다.
+      const result$ = this.client.emit('math.sum.event', { value: data }).pipe(timeout(5000)); // 5초 타임아웃 설정;
 
-    return {
-      message: '이벤트가 카프카로 전송되었습니다. 결과는 나중에 처리됩니다.',
-      sentData: data,
-    };
+      // 2. 브로커에 성공적으로 기록될 때까지 await
+      await firstValueFrom(result$);
+
+      // 3. 발행 성공 후 유저에게 응답
+      return { status: 'Success', message: '이벤트가 카프카에 저장되었습니다.', sentData: data };
+
+    } catch (error) {
+      // 4. 발행 실패 시 (카프카 다운 등) 에러 응답
+      throw new HttpException('카프카 전송 실패', HttpStatus.SERVICE_UNAVAILABLE);
+    }
   }
 
   @Get('load-test')

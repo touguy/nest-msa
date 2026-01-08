@@ -15,6 +15,8 @@
 ## Test
   http://localhost:3000/math/add?data=1,2,3
 
+  http://localhost:3000/math/emit-add?data=1,2,3
+
 ## Version
 
 ### v1.0
