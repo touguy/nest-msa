@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, Query, OnModuleInit, OnModuleDestroy, ParseArrayPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
-import { timeout, catchError } from 'rxjs/operators';
-import { of, firstValueFrom } from 'rxjs';
+import { of, firstValueFrom, timeout, catchError } from 'rxjs';
+import { v4 as uuidv4 } from 'uuid';
 
 @Controller('math')
 export class AppController implements OnModuleInit, OnModuleDestroy {
@@ -39,20 +39,27 @@ export class AppController implements OnModuleInit, OnModuleDestroy {
 
   @Get('emit-add')
   async emitSum(@Query('data', new ParseArrayPipe({ items: Number, separator: ',' })) data: number[]) {
+
+    // 비즈니스 고유 키 생성 (중복 처리 방지용)
+    const requestId = uuidv4();
+
     try {
       // 1. 카프카에 발행 시도
       // emit()도 내부적으로 acks 설정에 따라 브로커의 확인을 기다립니다.
-      const result$ = this.client.emit('math.sum.event', { value: data }).pipe(timeout(5000)); // 5초 타임아웃 설정;
+      const result$ = this.client.emit('math.sum.event', {
+        key: requestId, // 카프카 메시지 키
+        value: { data, requestId },
+      }).pipe(timeout(5000)); // 5초 타임아웃 설정;
 
       // 2. 브로커에 성공적으로 기록될 때까지 await
       await firstValueFrom(result$);
 
       // 3. 발행 성공 후 유저에게 응답
-      return { status: 'Success', message: '이벤트가 카프카에 저장되었습니다.', sentData: data };
+      return { status: 'Success', message: '이벤트가 카프카에 저장되었습니다.', sentData: { data, requestId } };
 
     } catch (error) {
       // 4. 발행 실패 시 (카프카 다운 등) 에러 응답
-      throw new HttpException('카프카 전송 실패', HttpStatus.SERVICE_UNAVAILABLE);
+      throw new HttpException('카프카 전송 실패: ' + error.message, HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
 

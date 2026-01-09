@@ -32,8 +32,8 @@ export class AppController implements OnModuleDestroy {
   }
 
   @EventPattern('math.sum.event') // 이벤트 패턴 사용
-  async handleSumEvent(@Payload() data: number[], @Ctx() context: KafkaContext) {
-    console.log('[이벤트 수신] 계산 시작:', data);
+  async handleSumEvent(@Payload() payload: any, @Ctx() context: KafkaContext) {
+    console.log('[이벤트 수신] 계산 시작:', payload.data);
 
     const { offset } = context.getMessage(); // 오프셋  
     const partition = context.getPartition(); // 파티션
@@ -44,13 +44,13 @@ export class AppController implements OnModuleDestroy {
     const messageKey = '${topic}-${partition}-${offset}';
 
     try {
-      console.log('[이벤트 수신] 토픽:${topic}, 오프셋 ${offset} 계산 시작:', data);
+      console.log('[이벤트 수신] 토픽:${topic}, 오프셋 ${offset} 계산 시작:', payload.data);
 
       // 1. 비즈니스 로직 수행 (예: DB 저장 등)
       // 만약 여기서 에러가 나면 catch 블록으로 이동합니다.
-      await this.doBusinessLogic(data);
+      await this.doBusinessLogic(payload.data);
 
-      const result = data.reduce((a, b) => a + b, 0);
+      const result = payload.data.reduce((a, b) => a + b, 0);
       console.log('[이벤트 처리 완료] 결과: ${result} (이 결과는 DB에 저장되었다고 가정합니다)');
 
       this.retryMap.delete(messageKey);
@@ -89,7 +89,7 @@ export class AppController implements OnModuleDestroy {
         const dlqTopic = '${topic}.dlq';
         await firstValueFrom(
           this.client.emit(dlqTopic, {
-            originalValue: data,
+            originalValue: payload,
             error: error.message,
             originalOffset: offset,
             timestamp: new Date().toISOString(),
