@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { AppController } from './app.controller';
+import { logLevel } from 'kafkajs';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { AppController } from './app.controller';
           client: {
             clientId: 'math-gateway', // 카프카 클라이언트 식별자
             brokers: ['10.10.1.121:9092'], // 카프카 브로커 주소
+            logLevel: logLevel.INFO, // INFO에서 DEBUG로 변경
           },
           consumer: {
             groupId: 'math-gateway-consumer', // 응답을 받기 위한 컨슈머 그룹
