@@ -41,32 +41,32 @@ export class AppController implements OnModuleDestroy {
 
     const consumer = context.getConsumer();
 
-    const messageKey = '${topic}-${partition}-${offset}';
+    const messageKey = `${topic}-${partition}-${offset}`;
 
     try {
-      console.log('[이벤트 수신] 토픽:${topic}, 오프셋 ${offset} 계산 시작:', payload.data);
+      console.log(`[이벤트 수신] 토픽:${topic}, 오프셋 ${offset} 계산 시작:`, payload.data);
 
       // 1. 비즈니스 로직 수행 (예: DB 저장 등)
       // 만약 여기서 에러가 나면 catch 블록으로 이동합니다.
       await this.doBusinessLogic(payload.data);
 
       const result = payload.data.reduce((a, b) => a + b, 0);
-      console.log('[이벤트 처리 완료] 결과: ${result} (이 결과는 DB에 저장되었다고 가정합니다)');
+      console.log(`[이벤트 처리 완료] 결과: ${result} (이 결과는 DB에 저장되었다고 가정합니다)`);
 
       this.retryMap.delete(messageKey);
-      console.log('[성공] 오프셋 ${offset} 커밋 완료');
+      console.log(`[성공] 오프셋 ${offset} 커밋 완료`);
 
       // NestJS Kafka의 기본 설정이 autoCommit: true라면 함수가 에러 없이 끝날 때 자동으로 오프셋이 커밋됩니다.
     } catch (error) {
       const currentRetry = (this.retryMap.get(messageKey) || 0) + 1;
-      console.error('[에러] 오프셋 ${offset} 실패 (${currentRetry}회): ${error.message}');
+      console.error(`[에러] 오프셋 ${offset} 실패 (${currentRetry}회): ${error.message}`);
 
       if (currentRetry <= this.MAX_RETRY_COUNT) {
 
         // 2. 재시도 로직: 카운트 증가 후 에러를 던져 커밋 방지
         this.retryMap.set(messageKey, currentRetry);
 
-        console.log('[일시정지] ${partition}번 파티션 ${this.RETRY_DELAY}ms 동안 중지');
+        console.log(`[일시정지] ${partition}번 파티션 ${this.RETRY_DELAY_MS}ms 동안 중지`);
 
         // 해당 파티션을 멈춰서 다음 메시지를 읽지 못하게 함 (순서 보장 효과)
         consumer.pause([{ topic, partitions: [partition] }]);
@@ -84,9 +84,9 @@ export class AppController implements OnModuleDestroy {
         // 5. 최종 실패 시 DLQ 전송 및 강제 커밋 (순서를 위해 포기하고 다음으로 넘어감)
         // 3. DLQ 도입: 특정 조건이나 재시도 실패 시 DLQ로 전송
         // 실무에서는 전송 전 재시도 횟수를 체크하는 로직을 추가하는 것이 좋습니다.
-        console.log('[최종 실패] ${this.MAX_RETRY_COUNT}회 초과. DLQ로 이동.');
+        console.log(`[최종 실패] ${this.MAX_RETRY_COUNT}회 초과. DLQ로 이동.`);
 
-        const dlqTopic = '${topic}.dlq';
+        const dlqTopic = `${topic}.dlq`;
         await firstValueFrom(
           this.client.emit(dlqTopic, {
             originalValue: payload,
@@ -97,7 +97,7 @@ export class AppController implements OnModuleDestroy {
         );
 
         this.retryMap.delete(messageKey);
-        console.log('[DLQ] 실패 메시지 ${dlqTopic}로 이동 및 커밋 완료');
+        console.log(`[DLQ] 실패 메시지 ${dlqTopic}로 이동 및 커밋 완료`);
         return;
       }
     }

@@ -6,6 +6,9 @@
   ### v2.0
   npm install kafkajs
 
+  ## v3.0
+  npm install uuid
+  npm install --save-dev @types/uuid
 
 ## Run
   서버, 클라이언트 각각
