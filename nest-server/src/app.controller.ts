@@ -56,9 +56,7 @@ export class AppController implements OnModuleDestroy {
       this.retryMap.delete(messageKey);
       console.log('[성공] 오프셋 ${offset} 커밋 완료');
 
-      // 사실: NestJS Kafka의 기본 설정이 autoCommit: true라면 
-      // 함수가 에러 없이 끝날 때 자동으로 오프셋이 커밋됩니다.
-
+      // NestJS Kafka의 기본 설정이 autoCommit: true라면 함수가 에러 없이 끝날 때 자동으로 오프셋이 커밋됩니다.
     } catch (error) {
       const currentRetry = (this.retryMap.get(messageKey) || 0) + 1;
       console.error('[에러] 오프셋 ${offset} 실패 (${currentRetry}회): ${error.message}');
